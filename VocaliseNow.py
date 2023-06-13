@@ -15,8 +15,21 @@ global sett
 global modDirectEntry
 global genMetaBool
 global allModels
+global allLangName
+global allVoiceName
+global allModelName
+global defaultValues
+global dropsList
+global dropsDefaults
 
 def main():
+    global dropsList
+    global dropsDefaults
+    dropSpeakersDefault = "Select Voice"
+    dropLangsDefault = "Select Language"
+    dropModelsDefault = "Select Model"
+    dropsDefaults = [dropLangsDefault, dropSpeakersDefault, dropModelsDefault]
+
     def CreateSettings():
         # Data to be written
         dictionary = {
@@ -61,51 +74,88 @@ def main():
         with open(directory+"/meta_"+name+".json", "w") as outfile:
             outfile.write(json_object)
 
-    def PickModel(e):
+    def PickModel():
         #Define voice model
         global tts
+        for model in TTS.list_models():
+            modelType, lang, dataset, modelName = model.split("/")
+            if lang == dropLangs.get() and dataset == dropSpeakers.get() and modelName == dropModels.get():
+                fullModelName = modelType+"/"+lang+"/"+dataset+"/"+modelName
         path = str(PullDirectory("modelDirectory"))
-        tts = TTS(dropModels.get(), output_path=path)
-        UpdateDrops()
+        tts = TTS(fullModelName, output_path=path)
+        return fullModelName
 
-    def UpdateDrops():
-        if tts.is_multi_speaker:
-            dropSpeakers.configure(values = tts.speakers)
-            dropSpeakers.set("Select Voice")
-        else:
-            dropSpeakers.configure(values = [" "])
-            dropSpeakers.set(" ")
-        if tts.is_multi_lingual:
-            dropLangs.configure(values = tts.languages)
-            dropLangs.set("Select Language")
-        else:
-            dropLangs.configure(values = [" "])
-            dropLangs.set(" ")
+    def UpdateDrops(dropIndx: int = None):
+        global allModels
+        global allLangName
+        global allVoiceName
+        global allModelName
+        global defaultValues
+
+        optionChanged = dropsList[dropIndx]
+        temp = []
+        for drop in dropsList:
+            if drop != optionChanged:
+                temp.append(drop)
+        #For each non selected options
+        for notSelected in temp:
+            newValues = []
+            #Check all models
+            for model in allModels:
+                #If all selected options math the model
+                if model[dropsList.index(optionChanged)] == optionChanged.get():
+                    #Add the value of the non selected option in that model to array
+                    val = model[dropsList.index(notSelected)]
+                    if val not in newValues:
+                        newValues.append(val)
+            #Set array of options to the available options
+            notSelected.configure(values = newValues)
+
+            if notSelected.get() not in notSelected.cget("values"):
+                notSelected.set(dropsDefaults[dropsList.index(notSelected)])  
+
+    def ResetDrops():
+        for drop in dropsList:
+            drop.configure(values = defaultValues[dropsList.index(drop)])
+            drop.set(dropsDefaults[dropsList.index(drop)])
 
     def GetModelData():
         global allModels
+        global allLangName
+        global allVoiceName
+        global allModelName
+        global defaultValues
+
         allModels = []
+        allLangName = []
+        allVoiceName = []
+        allModelName = []
         for model in TTS.list_models():
             modelType, lang, dataset, modelName = model.split("/")
-            
-            modelDict = {
-                "modelType": modelType,
-                "modelLang": lang,
-                "modelVoice": dataset,
-                "modelName": modelName
-            }
+            modelDict = [lang, dataset, modelName]
             allModels.append(modelDict)
+
+        for model in allModels:
+            if model[0] not in allLangName:
+                allLangName.append(model[0])
+            if model[1] not in allVoiceName:
+                allVoiceName.append(model[1])
+            if model[2] not in allModelName:
+                allModelName.append(model[2])
+
+        defaultValues = [allLangName, allVoiceName, allModelName]
 
     #Generate TTS voice
     def GenTTS():
+        fullModelName = PickModel()
         newText = ParseText(textEntry.get('1.0', END))
 
         if genMetaBool:
-            CreateMeta(directEntry.get(), nameEntry.get(), newText + "$", dropModels.get())
+            CreateMeta(directEntry.get(), nameEntry.get(), newText + "$", fullModelName)
 
         if tts.is_multi_speaker:
             if tts.is_multi_lingual:
-                tts.tts_to_file(text=newText, speaker=dropSpeakers.get(), language=PullDirectory("saveDirectory"), file_path=directEntry.get() + "/"+nameEntry.get()+".wav")
+                tts.tts_to_file(text=newText, speaker=dropSpeakers.get(), language=dropLangs.get(), file_path=PullDirectory("saveDirectory") + "/"+nameEntry.get()+".wav")
             else:
                 tts.tts_to_file(text=newText, speaker=dropSpeakers.get(), file_path=PullDirectory("saveDirectory") + "/"+nameEntry.get()+".wav")
         elif tts.is_multi_lingual:
@@ -181,6 +231,7 @@ def main():
     if not fileExists:
         CreateSettings()
     GetSettingBool()
+    GetModelData()
 
     ########## Settings Window ###########
 
@@ -257,7 +308,12 @@ def main():
     textEntry = customtkinter.CTkTextbox(leftFrame, width=40, height=100)
     textEntry.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
 
-    modelSelection = customtkinter.CTkFrame(rightFrame)
+    tabFrame = customtkinter.CTkTabview(rightFrame)
+    tabFrame.grid(row=0, column=0, padx=10, pady=10, sticky=N)
+    tabFrame.add("Voices")
+    tabFrame.add("Record")
+
+    modelSelection = customtkinter.CTkFrame(tabFrame.tab("Voices"))
     modelSelection.grid(row=0, column=0, padx=10, pady=10, sticky=N)
     modelSelection.columnconfigure(0, weight=1)
     modelSelection.rowconfigure(0, weight=1)
@@ -267,20 +323,25 @@ def main():
     modelSelection.rowconfigure(3, weight=1)
 
     customtkinter.CTkLabel(modelSelection, text="Lang:", width=5, pady=5, padx=10).grid(row=1, column=0)
-    dropLangs = customtkinter.CTkOptionMenu(modelSelection, values = [" "],)
-    #dropLangs.set("Select Language")
+    dropLangs = customtkinter.CTkOptionMenu(modelSelection, values = allLangName, command= lambda e: UpdateDrops(0))
+    dropLangs.set(dropLangsDefault)
     dropLangs.grid(row=1, column=1, sticky=EW, pady=5, padx=5)
 
     customtkinter.CTkLabel(modelSelection, text="Voice:", width=5, pady=5, padx=10).grid(row=2, column=0)
-    dropSpeakers = customtkinter.CTkOptionMenu(modelSelection, values = [" "])
+    dropSpeakers = customtkinter.CTkOptionMenu(modelSelection, values = allVoiceName, command= lambda e: UpdateDrops(1))
+    dropSpeakers.set(dropSpeakersDefault)
     dropSpeakers.grid(row=2, column=1, sticky=EW, pady=5, padx=5)
 
     #Make dropdown of all voice model options
     customtkinter.CTkLabel(modelSelection, text="Model:", width=5, pady=5, padx=10).grid(row=3, column=0, columnspan=2)
-    optionsModels = TTS.list_models()
-    dropModels = customtkinter.CTkOptionMenu(modelSelection, width=250, values = optionsModels, command=PickModel)
-    dropModels.set("Select Model")
+    dropModels = customtkinter.CTkOptionMenu(modelSelection, width=250, values = allModelName, command= lambda e: UpdateDrops(2))
+    dropModels.set(dropModelsDefault)
     dropModels.grid(row=4, column=0, columnspan=2, sticky=EW, pady=5, padx=5)
+
+    dropsList = [dropLangs, dropSpeakers, dropModels]
+
+    resetButton = customtkinter.CTkButton(modelSelection, text='Reset', command = lambda: ResetDrops())
+    resetButton.grid(row=5, column=0, pady=5, padx=5, columnspan=2)
 
     #dropModels.bind("<<ComboboxSelected>>", PickModel)
 
