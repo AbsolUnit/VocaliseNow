@@ -240,7 +240,7 @@ def main():
         global modDirectEntry
         #Creating settings window
         sett = customtkinter.CTkToplevel(root)
-        sett.iconbitmap("./Lib/icons/Cog.ico")
+        #sett.iconbitmap("./Lib/icons/Cog.ico")
         sett.attributes("-topmost", "true")
         root.attributes("-disabled", "true")
 
@@ -281,7 +281,7 @@ def main():
 
     #Make main window
     root = customtkinter.CTk()
-    root.iconbitmap("./Lib/icons/LogoS.ico")
+    #root.iconbitmap("./Lib/icons/LogoS.ico")
     root.title("CoquiTTS Generator")
     root.geometry("1000x600")
     root.columnconfigure(0, weight=1)
