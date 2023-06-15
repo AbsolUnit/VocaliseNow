@@ -5,8 +5,7 @@ from tkinter import filedialog
 from tkinter import scrolledtext
 from os.path import exists
 import customtkinter
-import threading
-import asyncio
+import os
 import json
 
 #Def global variables
@@ -33,8 +32,8 @@ def main():
     def CreateSettings():
         # Data to be written
         dictionary = {
-            "saveDirectory": "",
-            "modelDirectory": "",
+            "saveDirectory": str(os.getcwd()),
+            "modelDirectory": str(os.getcwd()),
             "genMeta": "True"
         }
         
@@ -59,17 +58,17 @@ def main():
         for char in text:
             if char == "$":
                 dictionary2 = {
-                    "speech": para
+                    "speech": para,
+                    "audio": name + str(i) + ".wav"
                 }
                 dictionary["bubble"].append(dictionary2)
-                para = " "
+                para = ""
                 i += 1
             else:
                 para += char
         
         # Serializing json
         json_object = json.dumps(dictionary, indent=4)
-        
         # Writing to sample.json
         with open(directory+"/meta_"+name+".json", "w") as outfile:
             outfile.write(json_object)
@@ -148,20 +147,35 @@ def main():
     #Generate TTS voice
     def GenTTS():
         fullModelName = PickModel()
-        newText = ParseText(textEntry.get('1.0', END))
+        newText = ParseText(textEntry.get('1.0', END)) + "$"
+        name = nameEntry.get()
+        directory = PullDirectory("saveDirectory") + "/" + name
+        if not os.path.exists(directory):
+            os.mkdir(directory)
 
         if genMetaBool:
-            CreateMeta(directEntry.get(), nameEntry.get(), newText + "$", fullModelName)
+            CreateMeta(directory, name, newText, fullModelName)
 
+        i = 0
+        para = ""
+        for char in newText:
+            if char == "$":
+                CreateAudio(para, directory, name, i)
+                para = ""
+                i += 1
+            else:
+                para += char
+
+    def CreateAudio(text, directory, name, id):
         if tts.is_multi_speaker:
             if tts.is_multi_lingual:
-                tts.tts_to_file(text=newText, speaker=dropSpeakers.get(), language=dropLangs.get(), file_path=PullDirectory("saveDirectory") + "/"+nameEntry.get()+".wav")
+                tts.tts_to_file(text=text, speaker=dropSpeakers.get(), language=dropLangs.get(), file_path=directory + "/"+name + str(id) +".wav")
             else:
-                tts.tts_to_file(text=newText, speaker=dropSpeakers.get(), file_path=PullDirectory("saveDirectory") + "/"+nameEntry.get()+".wav")
+                tts.tts_to_file(text=text, speaker=dropSpeakers.get(), file_path=directory + "/"+name + str(id) +".wav")
         elif tts.is_multi_lingual:
-            tts.tts_to_file(text=newText, language=dropLangs.get(), file_path=PullDirectory("saveDirectory") + "/"+nameEntry.get()+".wav")
+            tts.tts_to_file(text=text, language=dropLangs.get(), file_path=directory + "/"+name + str(id) +".wav")
         else:
-            tts.tts_to_file(text=newText, file_path=PullDirectory("saveDirectory") + "/"+nameEntry.get()+".wav")
+            tts.tts_to_file(text=text, file_path=directory + "/"+name + str(id) +".wav")
 
 
     def GetSettingBool(switch: customtkinter.CTkSwitch = None, id: str = "genMeta"):
@@ -197,7 +211,10 @@ def main():
             settings = json.load(settingsJson)
 
         # Change Directory in settings
-        settings[str(id)] = str(filepath)
+        if filepath != "":
+            settings[str(id)] = str(filepath)
+        else:
+            settings[str(id)] = str(os.getcwd())
 
         # Save changes
         with open("settings.json", "w") as outfile:

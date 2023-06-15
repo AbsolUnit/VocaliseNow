@@ -1,0 +1,9 @@
+1. cd repository/directory/VocaliseNow
+2. python.exe -m venv .
+3. cd .\Scripts
+4. .\activate
+5. cd ..
+6. python.exe -m pip install pip wheel setuptools -U
+7. pip install tts
+8. pip install customtkinter
+9. move contents of CustomPackages into Lib/site-packages and click replace
