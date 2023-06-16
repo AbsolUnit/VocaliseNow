@@ -50,7 +50,8 @@ def main():
 
         dictionary = {
             "bubble": l,
-            "model": model
+            "model": model,
+            "count": 0
         }
 
         i = 0
@@ -62,6 +63,7 @@ def main():
                     "audio": name + str(i) + ".wav"
                 }
                 dictionary["bubble"].append(dictionary2)
+                dictionary["count"] += 1
                 para = ""
                 i += 1
             else:
