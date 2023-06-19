@@ -83,7 +83,7 @@ def main():
             if lang == dropLangs.get() and dataset == dropSpeakers.get() and modelName == dropModels.get():
                 fullModelName = modelType+"/"+lang+"/"+dataset+"/"+modelName
         path = str(PullDirectory("modelDirectory"))
-        tts = TTS(fullModelName, output_path=path)
+        tts = TTS(fullModelName)
         return fullModelName
 
     def UpdateDrops(dropIndx: int = None):
