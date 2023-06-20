@@ -75,7 +75,7 @@ def main():
         with open(directory+"/meta_"+name+".json", "w") as outfile:
             outfile.write(json_object)
 
-    def PickModel():
+    def PickModel(overide: str = ""):
         #Define voice model
         global tts
         for model in TTS.list_models():
@@ -83,8 +83,13 @@ def main():
             if lang == dropLangs.get() and dataset == dropSpeakers.get() and modelName == dropModels.get():
                 fullModelName = modelType+"/"+lang+"/"+dataset+"/"+modelName
         path = str(PullDirectory("modelDirectory"))
-        tts = TTS(fullModelName)
-        return fullModelName
+        if overide == "":
+            tts = TTS(fullModelName, output_path=path)
+            return fullModelName
+        else:
+            tts = TTS(overide, output_path=path)
+            return overide
+        
 
     def UpdateDrops(dropIndx: int = None):
         global allModels
@@ -244,6 +249,35 @@ def main():
                 out += char
         return out
         
+    def GenPreviews():
+        for model in TTS.list_models():
+            modelType, lang, dataset, modelName = model.split("/")
+            fullModelName = modelType+"/"+lang+"/"+dataset+"/"+modelName
+            if modelName != "your_tts" and lang == "en" and dataset != "vctk" and dataset != "multi-dataset":
+                PickModel(fullModelName)
+                dir1 = PullDirectory("saveDirectory") + "/" + modelType
+                dir2 = dir1 + "/" + lang
+                dir3 = dir2 + "/" + dataset
+                dir4 = dir3 + "/" + modelName
+                if not os.path.exists(dir1):
+                    os.mkdir(dir1)
+                if not os.path.exists(dir2):
+                    os.mkdir(dir2)
+                if not os.path.exists(dir3):
+                    os.mkdir(dir3)
+                if not os.path.exists(dir4):
+                    os.mkdir(dir4)
+                directory = PullDirectory("saveDirectory") + "/" + modelType + "/" + lang + "/" + dataset + "/" + modelName
+                saveName = lang + "-" + dataset + "-" + modelName
+                if tts.is_multi_speaker:
+                    if tts.is_multi_lingual:
+                        tts.tts_to_file(text="this is a preview of this voice", speaker=dataset, language=lang, file_path=directory + "/"+saveName +".wav")
+                    else:
+                        tts.tts_to_file(text="this is a preview of this voice", speaker=dropSpeakers.get(), file_path=directory + "/"+saveName +".wav")
+                elif tts.is_multi_lingual:
+                    tts.tts_to_file(text="this is a preview of this voice", language=dropLangs.get(), file_path=directory + "/"+saveName +".wav")
+                else:
+                    tts.tts_to_file(text="this is a preview of this voice", file_path=directory + "/"+saveName +".wav")
 
     #Making settings file 
     fileExists = exists("settings.json")
@@ -317,6 +351,9 @@ def main():
     rightFrame.columnconfigure(0, weight=1)
     rightFrame.rowconfigure(0, weight=1)
     rightFrame.rowconfigure(1, weight=1)
+
+    #previews = customtkinter.CTkButton(rightFrame, text='previews', command = lambda: GenPreviews())
+    #previews.grid(row=2, column=0, pady=5, padx=5, columnspan=2)
 
     #Settings and info buttons
     settingsButton = customtkinter.CTkButton(root, text="Settings", command=SettingsPopUp)
