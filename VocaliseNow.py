@@ -138,8 +138,9 @@ def main():
         allModelName = []
         for model in TTS.list_models():
             modelType, lang, dataset, modelName = model.split("/")
-            modelDict = [lang, dataset, modelName]
-            allModels.append(modelDict)
+            if lang != "multilingual" and dataset != "multi-dataset" and dataset != "vctk":
+                modelDict = [lang, dataset, modelName]
+                allModels.append(modelDict)
 
         for model in allModels:
             if model[0] not in allLangName:
@@ -279,6 +280,10 @@ def main():
                 else:
                     tts.tts_to_file(text="this is a preview of this voice", file_path=directory + "/"+saveName +".wav")
 
+    def VoiceConv():
+        tts = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False, output_path=str(PullDirectory("modelDirectory")))
+        tts.voice_conversion_to_file(source_wav="source.wav", target_wav="target.wav", file_path="output.wav")
+
     #Making settings file 
     fileExists = exists("settings.json")
     if not fileExists:
@@ -354,6 +359,9 @@ def main():
 
     #previews = customtkinter.CTkButton(rightFrame, text='previews', command = lambda: GenPreviews())
     #previews.grid(row=2, column=0, pady=5, padx=5, columnspan=2)
+
+    convert = customtkinter.CTkButton(rightFrame, text='convert', command = lambda: VoiceConv())
+    convert.grid(row=2, column=0, pady=5, padx=5, columnspan=2)
 
     #Settings and info buttons
     settingsButton = customtkinter.CTkButton(root, text="Settings", command=SettingsPopUp)
