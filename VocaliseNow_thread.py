@@ -2,7 +2,6 @@ from TTS.api import TTS
 from tkinter import *  
 from tkinter import filedialog
 from os.path import exists
-import math
 import pyaudio
 import wave
 import customtkinter
@@ -10,9 +9,7 @@ import os
 import json
 import FairseqLangs
 
-import asyncio
-import concurrent.futures
-from async_tkinter_loop import async_handler, async_mainloop
+import threading
 
 
 ########## Json handling ##########
@@ -120,12 +117,7 @@ def GetDirectory(entry, id):
 
 def LoadDirectory(entry, id):
     entry.delete(0,END)
-    entry.insert(0,PullDirectory(id))
-
-def PullDirectory(id):
-    with open("settings.json", "r") as settingsJson:
-        settings = json.load(settingsJson)
-    return settings[str(id)]
+    entry.insert(0,GetSetting(id))
 
 ########## Json handling ##########
 
@@ -134,14 +126,14 @@ def PullDirectory(id):
 def Finish():
     global tabFrame
     if tabFrame.get() == "Voices":
-        GenTTS()
+        GenTTS(False)
     else:
-        VoiceConv()
+        GenTTS(True)
 
 def PickModel(overide: str = ""):
     #Define voice model
     global tts
-    path = str(PullDirectory("modelDirectory"))
+    path = str(GetSetting("modelDirectory"))
     if overide == "":
         for model in TTS.list_models():
             modelType, lang, dataset, modelName = model.split("/")
@@ -154,13 +146,17 @@ def PickModel(overide: str = ""):
         return overide
     
 #Generate TTS voice
-def GenTTS():
-    fullModelName = PickModel()
+def GenTTS(conv):
     newText = ParseText(textEntry.get('1.0', END)) + "$"
     name = nameEntry.get()
-    directory = PullDirectory("saveDirectory") + "/" + name
+    directory = GetSetting("saveDirectory") + "/" + name
     if not os.path.exists(directory):
         os.mkdir(directory)
+
+    if not conv:
+        fullModelName = PickModel()
+    else:
+        fullModelName = PickModel("tts_models/"+FairseqLangs.langs[convLang.get()]+"/fairseq/vits")
 
     if genMetaBool:
         CreateMeta(directory, name, newText, fullModelName)
@@ -169,28 +165,30 @@ def GenTTS():
     para = ""
     for char in newText:
         if char == "$":
-            CreateAudio(para, directory, name, i)
+            CreateAudio(para, directory, name, i, conv)
             para = ""
             i += 1
         else:
             para += char
 
-def VoiceConv():
-    api = TTS("tts_models/eng/fairseq/vits")
-    api.tts_with_vc_to_file("hello this is a test",speaker_wav="pp.mp3",file_path="output.wav")
-
-def CreateAudio(text, directory, name, id):
-    if tts.is_multi_speaker:
-        if tts.is_multi_lingual:
-            tts.tts_to_file(text=text, speaker=dropSpeakers.get(), language=dropLangs.get(), file_path=directory + "/"+name + str(id) +".wav")
+def CreateAudio(text, directory, name, id, conv):
+    if not conv:
+        if tts.is_multi_speaker:
+            if tts.is_multi_lingual:
+                tts.tts_to_file(text=text, speaker=dropSpeakers.get(), language=dropLangs.get(), file_path=directory + "/"+name + str(id) +".wav")
+            else:
+                tts.tts_to_file(text=text, speaker=dropSpeakers.get(), file_path=directory + "/"+name + str(id) +".wav")
+        elif tts.is_multi_lingual:
+            tts.tts_to_file(text=text, language=dropLangs.get(), file_path=directory + "/"+name + str(id) +".wav")
         else:
-            tts.tts_to_file(text=text, speaker=dropSpeakers.get(), file_path=directory + "/"+name + str(id) +".wav")
-    elif tts.is_multi_lingual:
-        tts.tts_to_file(text=text, language=dropLangs.get(), file_path=directory + "/"+name + str(id) +".wav")
+            tts.tts_to_file(text=text, file_path=directory + "/"+name + str(id) +".wav")
     else:
-        tts.tts_to_file(text=text, file_path=directory + "/"+name + str(id) +".wav")
+        fileType = os.path.splitext(GetSetting("recSelectDirectory"))[1]
+        if fileType == ".wav":
+            tts.tts_with_vc_to_file(text=text, speaker_wav=GetSetting("recSelectDirectory"), file_path=directory + "/"+name + str(id) +".wav")
+        else:
+            print("please select .wav file")
     
-
 def ParseText(text):
     out = ""
     for char in text:
@@ -234,11 +232,11 @@ def UpdateDrops(dropIndx: int = None):
     
     if dropLangs.get() != dropLangsDefault and dropSpeakers.get() != dropSpeakersDefault and dropModels.get() != dropModelsDefault:
         if textEntry.get('1.0', END) != "":
-            finishButtonV.configure(state="normal")
+            finishButton.configure(state="normal")
         if previewsGenerated:
             previewButton.configure(state="normal")
     else:
-        finishButtonV.configure(state="disabled")
+        finishButton.configure(state="disabled")
         previewButton.configure(state="disabled")
 
 def ResetDrops():
@@ -277,7 +275,7 @@ def GetModelData():
 
 ########## Voice Previews ##########
 
-def CreatePreviews():
+def GenPreviews():
     global tts
     global previewsGenerated
     previewsGenerated = False
@@ -285,8 +283,8 @@ def CreatePreviews():
         modelType, lang, dataset, modelName = model.split("/")
         fullModelName = modelType+"/"+lang+"/"+dataset+"/"+modelName
         if modelName != "your_tts" and lang == "en" and dataset != "vctk" and dataset != "multi-dataset":
-            tts = TTS(fullModelName, output_path=str(PullDirectory("modelDirectory")))
-            dir1 = PullDirectory("saveDirectory") + "/" + modelType
+            tts = TTS(fullModelName, output_path=str(GetSetting("modelDirectory")))
+            dir1 = GetSetting("saveDirectory") + "/" + modelType
             dir2 = dir1 + "/" + lang
             dir3 = dir2 + "/" + dataset
             dir4 = dir3 + "/" + modelName
@@ -298,7 +296,7 @@ def CreatePreviews():
                 os.mkdir(dir3)
             if not os.path.exists(dir4):
                 os.mkdir(dir4)
-            directory = PullDirectory("saveDirectory") + "/" + modelType + "/" + lang + "/" + dataset + "/" + modelName
+            directory = GetSetting("saveDirectory") + "/" + modelType + "/" + lang + "/" + dataset + "/" + modelName
             saveName = lang + "-" + dataset + "-" + modelName
             if tts.is_multi_speaker:
                 if tts.is_multi_lingual:
@@ -312,57 +310,84 @@ def CreatePreviews():
     previewsGenerated = True
     UpdateSetting("previewsGenerated", "True")
 
-async def CreatePreviewsAsync():
-    loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as previewPool:
-        await loop.run_in_executor(previewPool, CreatePreviews)
-
-async def GenPreviews():
-    await CreatePreviewsAsync()
-    print("done")
-
-def PlayAudio(wf):
+def PlayPreview():
+    global previewBar
+    soundName = dropLangs.get() + "-" + dropSpeakers.get() + "-" + dropModels.get() + ".wav"
+    soundPath = "./tts_models/" + dropLangs.get() + "/" + dropSpeakers.get() + "/" + dropModels.get() + "/" + soundName
+    #previewSound = wave(soundPath)
     chunk = 1024
-    waveFile = wf
+    waveFile = wave.open(soundPath, 'rb')
     port = pyaudio.PyAudio()
     stream = port.open(format = port.get_format_from_width(waveFile.getsampwidth()),
                 channels = waveFile.getnchannels(),
                 rate = waveFile.getframerate(),
                 output = True)
     data = waveFile.readframes(chunk)
+    st = stream.get_time()
+    frames = waveFile.getnframes()
+    rate = waveFile.getframerate()
+    length = frames/float(rate)
     while len(data := waveFile.readframes(chunk)):
+        previewBar.set((stream.get_time() - st)/length)
         stream.write(data)
+        previewBar.set((stream.get_time() - st)/length)
     stream.close()
+    port.terminate() 
+
+########## Voice Previews ##########
+
+########## Record Audio ##########
+
+def RecordWav(length, name):
+    chunk = 1024  # Record in chunks of 1024 samples
+    sample_format = pyaudio.paInt16  # 16 bits per sample
+    channels = 2
+    fps = 44100  # Record at 44100 samples per second
+    seconds = length*60
+    filename = GetSetting("recSaveDirectory") + name + ".wav"
+
+    port = pyaudio.PyAudio()  # Create an interface to PortAudio
+
+    print('Recording')
+
+    stream = port.open(format=sample_format,
+                    channels=channels,
+                    rate=fps,
+                    frames_per_buffer=chunk,
+                    input=True)
+
+    frames = []  # Initialize array to store frames
+
+    # Store data in chunks for 3 seconds
+    for i in range(0, int(fps / chunk * seconds)):
+        data = stream.read(chunk)
+        frames.append(data)
+
+    # Stop and close the stream 
+    stream.stop_stream()
+    stream.close()
+    # Terminate the PortAudio interface
     port.terminate()
 
-async def PlayAudioAsync():
-    loop = asyncio.get_event_loop()
-    sn = dropLangs.get() + "-" + dropSpeakers.get() + "-" + dropModels.get() + ".wav"
-    sp = "./tts_models/" + dropLangs.get() + "/" + dropSpeakers.get() + "/" + dropModels.get() + "/" + sn
-    wf = wave.open(sp, 'rb')
-    frames = wf.getnframes()
-    rate = wf.getframerate()
-    length = round(frames/float(rate), 3)
-    previewBar.configure(determinate_speed= 50/((length*1000)/20)+0.2)
-    previewBar.start()
-    with concurrent.futures.ThreadPoolExecutor() as audioPool:
-        await loop.run_in_executor(audioPool, func= lambda: PlayAudio(wf))
+    print('Finished recording')
 
-async def PlayPreview():
-    await PlayAudioAsync()
-    print("playback complete")
-    previewBar.stop()
-    previewBar.set(0)
-    
-########## Voice Previews ##########
+    # Save the recorded data as a WAV file
+    wf = wave.open(filename, 'wb')
+    wf.setnchannels(channels)
+    wf.setsampwidth(port.get_sample_size(sample_format))
+    wf.setframerate(fps)
+    wf.writeframes(b''.join(frames))
+    wf.close()
+
+########## Record Audio ##########
     
 ########## Experimental ###########
 
 #tts = TTS("tts_models/en/multi-dataset/tortoise-v2")
 #tts.tts_to_file(text="Hello, my name is Manmay , how are you?", speaker= tts.speakers[0],file_path="output.wav")
-#tts = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False, output_path=str(PullDirectory("modelDirectory")))
+#tts = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False, output_path=str(GetSetting("modelDirectory")))
 ##tts.voice_conversion_to_file(source_wav="source.wav", target_wav="target.wav", file_path="output.wav")
-#tts = TTS(model_name="tts_models/multilingual/multi-dataset/your_tts", output_path=str(PullDirectory("modelDirectory")))
+#tts = TTS(model_name="tts_models/multilingual/multi-dataset/your_tts", output_path=str(GetSetting("modelDirectory")))
 #tts.tts_to_file("this is a test of some voice cloning with the pride and predjudice thing.", speaker_wav="pp.wav", language="en", file_path="output.wav")
 
 ########## Experimental ###########
@@ -378,10 +403,9 @@ def SettingsPopUp():
     global modDirectEntry
     #Creating settings window
     sett = customtkinter.CTkToplevel(root)
-    sett.grab_set()
     #sett.iconbitmap("./Lib/icons/Cog.ico")
-    #sett.attributes("-topmost", "true")
-    #root.attributes("-disabled", "true")
+    sett.attributes("-topmost", "true")
+    root.attributes("-disabled", "true")
 
     #Column config
     sett.columnconfigure(0, weight=1)
@@ -409,11 +433,12 @@ def SettingsPopUp():
     genMetaSwitch.grid(row=1, column=1, sticky=W)
 
     customtkinter.CTkLabel(sett, text="Download previews of voices:").grid(row=2, column=0)
-    previews = customtkinter.CTkButton(sett, text='Gen Previews', command = async_handler(GenPreviews))
+    previews = customtkinter.CTkButton(sett, text='Gen Previews', command = lambda: threading.Thread(target=GenPreviews()).start())
     previews.grid(row=2, column=1, sticky=W, pady=5, padx=5)
 
     #Finishing window
     sett.protocol("WM_DELETE_WINDOW", OnSettClose)
+    sett.mainloop()
 
 ########## Settings Window ###########
 
@@ -454,9 +479,8 @@ def main():
     global dropModels
     global textEntry
     global nameEntry
-    global finishButtonV
-    global finishButtonR
     global previewButton
+    global finishButton
     global tabFrame
     global convLang
     global previewBar
@@ -510,12 +534,8 @@ def main():
     directEntry.grid(row=2, column=0, columnspan=2, sticky=EW, pady=5, padx=5)
 
     #Finish button
-    finishButtonV = customtkinter.CTkButton(saveSelection, text="FinishV", command=GenTTS, height=40, state="disabled")
-    finishButtonV.grid(row=3, column=0, columnspan=2)
-
-    #Finish button
-    finishButtonR = customtkinter.CTkButton(saveSelection, text="FinishR", command=GenTTS, height=40, state="disabled")
-    #finishButtonR.grid(row=3, column=0, columnspan=2)
+    finishButton = customtkinter.CTkButton(saveSelection, text="FinishV", command=Finish, height=40, state="disabled")
+    finishButton.grid(row=3, column=0, columnspan=2)
 
 
     convert = customtkinter.CTkButton(rightFrame, text='convert', command = lambda: VoiceConv())
@@ -536,7 +556,7 @@ def main():
     voicePreview.columnconfigure(1, weight=1)
     voicePreview.rowconfigure(1, weight=1)
     previewLabel = customtkinter.CTkLabel(voicePreview, text="Selected Voice Preview:", pady=5, padx=10)
-    previewButton = customtkinter.CTkButton(voicePreview, text='Play', state="disabled", command =async_handler(PlayPreview), width=80)
+    previewButton = customtkinter.CTkButton(voicePreview, text='Play', state="disabled", command = lambda: threading.Thread(target=PlayPreview()).start(), width=80)
     previewBar = customtkinter.CTkProgressBar(voicePreview, orientation="horizontal", width=200)
     previewBar.set(0)
 
@@ -580,13 +600,9 @@ def main():
         global flipflop
         if flipflop == False:
             PreviewRemove()
-            finishButtonV.grid_remove()
-            finishButtonR.grid(row=3, column=0, columnspan=2)
             flipflop = True
         else:
             PreviewAdd()
-            finishButtonR.grid_remove()
-            finishButtonV.grid(row=3, column=0, columnspan=2)
             flipflop = False
 
     tabFrame = customtkinter.CTkTabview(rightFrame, command=FrameSwitch)
@@ -648,29 +664,26 @@ def main():
     recordLength.grid(row=1, column=2, sticky=W)
     customtkinter.CTkLabel(voiceConvRecord, text="mins", width=5, pady=5, padx=10).grid(row=1, column=2)
 
-    recordButton= customtkinter.CTkButton(voiceConvRecord, text='Record')
-    recordButton.grid(row=2, column=0, columnspan=3, pady=5, padx=10)
-
     customtkinter.CTkLabel(voiceConvRecord, text="Name:", width=5, pady=5, padx=10).grid(row=3, column=0)
     convNameEntry = customtkinter.CTkEntry(voiceConvRecord)
-    convNameEntry.grid(row=3, column=1, pady=5, padx=5, columnspan=2)
+    convNameEntry.grid(row=2, column=1, pady=5, padx=5, columnspan=2)
 
     #Save Directory
     convDirectEntry = customtkinter.CTkEntry(voiceConvRecord)
     LoadDirectory(convDirectEntry, "recSaveDirectory")
-    convDirectEntry.grid(row=5, column=0, columnspan=3, sticky=EW, pady=5, padx=5)
+    convDirectEntry.grid(row=3, column=0, columnspan=3, sticky=EW, pady=5, padx=5)
 
     customtkinter.CTkLabel(voiceConvRecord, text="Dir:", pady=5, padx=10).grid(row=4, column=0)
     convDirectButton = customtkinter.CTkButton(voiceConvRecord, text='Browse...', command = lambda: GetDirectory(convDirectEntry, "recSaveDirectory"))
     convDirectButton.grid(row=4, column=2)
     
+    recordButton= customtkinter.CTkButton(voiceConvRecord, text='Record', command= lambda: RecordWav(int(recordLength.get()), convNameEntry.get()))
+    recordButton.grid(row=5, column=0, columnspan=3, pady=5, padx=10)
 
     #Define main loop
-    #root.mainloop()
-    async_mainloop(root)
+    root.mainloop()
 
     ########## Main Window ###########
 
 if __name__ == "__main__":
     main()
-    

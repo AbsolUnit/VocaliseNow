@@ -1,49 +1,43 @@
+from tkinter import *
+from tkinter import messagebox
 import asyncio
-from random import randrange as rr
-import tkinter as tk
+import random
+from async_tkinter_loop import async_handler, async_mainloop
 
 
-class App(tk.Tk):
-    
-    def __init__(self, loop, interval=1/120):
-        super().__init__()
-        self.loop = loop
-        self.protocol("WM_DELETE_WINDOW", self.close)
-        self.tasks = []
-        self.tasks.append(loop.create_task(self.rotator(1/60, 2)))
-        self.tasks.append(loop.create_task(self.updater(interval)))
-
-    async def rotator(self, interval, d_per_tick):
-        canvas = tk.Canvas(self, height=600, width=600)
-        canvas.pack()
-        deg = 0
-        color = 'black'
-        arc = canvas.create_arc(100, 100, 500, 500, style=tk.CHORD,
-                                start=0, extent=deg, fill=color)
-        while await asyncio.sleep(interval, True):
-            deg, color = deg_color(deg, d_per_tick, color)
-            canvas.itemconfigure(arc, extent=deg, fill=color)
-
-    async def updater(self, interval):
-        while True:
-            self.update()
-            await asyncio.sleep(interval)
-
-    def close(self):
-        for task in self.tasks:
-            task.cancel()
-        self.loop.stop()
-        self.destroy()
+def do_freezed():
+    """ Button-Event-Handler to see if a button on GUI works. """
+    messagebox.showinfo(message='Tkinter is reacting.')
 
 
-def deg_color(deg, d_per_tick, color):
-    deg += d_per_tick
-    if 360 <= deg:
-        deg %= 360
-        color = '#%02x%02x%02x' % (rr(0, 256), rr(0, 256), rr(0, 256))
-    return deg, color
+async def one_url(url):
+    """ One task. """
+    sec = random.randint(1, 15)
+    await asyncio.sleep(sec)
+    return 'url: {}\tsec: {}'.format(url, sec)
 
-loop = asyncio.get_event_loop()
-app = App(loop)
-loop.run_forever()
-loop.close()
+
+async def do_urls():
+    """ Creating and starting 10 tasks. """
+    tasks = [
+        asyncio.create_task(one_url(url))  # added create_task to remove warning "The explicit passing of coroutine objects to asyncio.wait() is deprecated since Python 3.8, and scheduled for removal in Python 3.11."
+        for url in range(10)
+    ]
+    print("Started")
+    completed, pending = await asyncio.wait(tasks)
+    results = [task.result() for task in completed]
+    print('\n'.join(results))
+    print("Finished")
+
+
+if __name__ == '__main__':
+    root = Tk()
+
+    # Wrap async function into async_handler to use it as a button handler or an event handler
+    buttonT = Button(master=root, text='Asyncio Tasks', command=async_handler(do_urls))
+    buttonT.pack()
+    buttonX = Button(master=root, text='Freezed???', command=do_freezed)
+    buttonX.pack()
+
+    # Use async_mainloop(root) instead of root.mainloop()
+    async_mainloop(root)
