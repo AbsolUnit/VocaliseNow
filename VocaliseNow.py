@@ -146,9 +146,8 @@ async def GenTTS(dir, txt, mod, lang, speak, name, text, convTF, cLang):
     else:
         fullModelName = "tts_models/"+FairseqLangs.langs[cLang]+"/fairseq/vits"
 
-    global TTSPool
-    await loop.run_in_executor(TTSPool, func= lambda: PickModel(fullModelName, path))
-    TTSPool.shutdown()
+    with concurrent.futures.ThreadPoolExecutor() as TTSPool:
+        await loop.run_in_executor(TTSPool, func= lambda: PickModel(fullModelName, path))
 
     if genMetaBool:
         CreateMeta(dir, name, txt, fullModelName)
@@ -180,9 +179,8 @@ def ParseText(text):
 
 async def CreateAudioAsync(lang, speak, para, directory, name, i, conv):
     loop = asyncio.get_event_loop()
-    global TTSPool
-    await loop.run_in_executor(TTSPool, func= lambda: CreateAudio(lang, speak, para, directory, name, i, conv))
-    TTSPool.shutdown()
+    with concurrent.futures.ThreadPoolExecutor() as TTSPool:
+        await loop.run_in_executor(TTSPool, func= lambda: CreateAudio(lang, speak, para, directory, name, i, conv))
 
 async def Finish():
     global conv
@@ -318,9 +316,8 @@ def CreatePreviews():
 
 async def CreatePreviewsAsync():
     loop = asyncio.get_event_loop()
-    global previewPool
-    await loop.run_in_executor(previewPool, CreatePreviews)
-    previewPool.shutdown()
+    with concurrent.futures.ThreadPoolExecutor() as previewPool:
+        await loop.run_in_executor(previewPool, CreatePreviews)
 
 async def GenPreviews():
     await CreatePreviewsAsync()
@@ -352,9 +349,8 @@ async def PlayAudioAsync():
     previewBar.start()
 
     loop = asyncio.get_event_loop()
-    global audioPool
-    await loop.run_in_executor(audioPool, func= lambda: PlayAudio(wf))
-    audioPool.shutdown()
+    with concurrent.futures.ThreadPoolExecutor() as audioPool:
+        await loop.run_in_executor(audioPool, func= lambda: PlayAudio(wf))
 
 async def PlayPreview():
     await PlayAudioAsync()
@@ -413,9 +409,8 @@ async def RecordWavAsync(length, name):
     recBar.configure(determinate_speed= 1/(length*60))
     recBar.start()
 
-    global audioPool
-    await loop.run_in_executor(audioPool, func= lambda: RecordWav(length, name))
-    audioPool.shutdown()
+    with concurrent.futures.ThreadPoolExecutor() as audioPool:
+        await loop.run_in_executor(audioPool, func= lambda: RecordWav(length, name))
 
 async def RecordAudio():
     length = int(recordLength.get())
@@ -495,14 +490,6 @@ def init():
     global dropModelsDefault
     global previewsGenerated
 
-    global TTSPool
-    global audioPool
-    global previewPool
-
-    TTSPool = concurrent.futures.ThreadPoolExecutor()
-    audioPool = concurrent.futures.ThreadPoolExecutor()
-    previewPool = concurrent.futures.ThreadPoolExecutor()
-
     dropSpeakersDefault = "Select Voice"
     dropLangsDefault = "Select Language"
     dropModelsDefault = "Select Model"
@@ -519,12 +506,6 @@ def init():
     customtkinter.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
     customtkinter.set_default_color_theme("dark-blue")  # Themes: "blue" (standard), "green", "dark-blue"
     #GenPreviews()
-
-def OnRootClose():
-    audioPool.shutdown(wait=False, cancel_futures=True)
-    previewPool.shutdown(wait=False, cancel_futures=True)
-    TTSPool.shutdown(wait=False, cancel_futures=True)
-    root.destroy()
 
 def main():
     global dropsList
@@ -752,8 +733,6 @@ def main():
             finishButton.configure(state="disabled")
             previewButton.configure(state="disabled")
     ConstUpdate()
-
-    root.protocol("WM_DELETE_WINDOW", OnRootClose)
 
     #Define main loop
     async_mainloop(root)
