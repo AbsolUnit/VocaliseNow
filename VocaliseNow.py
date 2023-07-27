@@ -362,12 +362,12 @@ async def PlayPreview():
 
 ########## Record Audio ##########
 
-def RecordWav(length, name):
+def RecordWav(name):
+    global recording
     chunk = 1024  # Record in chunks of 1024 samples
     sample_format = pyaudio.paInt16  # 16 bits per sample
     channels = 2
     fps = 44100  # Record at 44100 samples per second
-    seconds = length*60
     filename = GetSetting("recSaveDirectory") + name + ".wav"
 
     port = pyaudio.PyAudio()  # Create an interface to PortAudio
@@ -383,9 +383,14 @@ def RecordWav(length, name):
     frames = []  # Initialize array to store frames
 
     # Store data in chunks for 3 seconds
-    for i in range(0, int(fps / chunk * seconds)):
+    i = 0
+    seconds = 3
+    while i < int(fps / chunk * seconds):
         data = stream.read(chunk)
         frames.append(data)
+        i += 1
+        if recording:
+            seconds += (1/(fps / chunk))
 
     # Stop and close the stream 
     stream.stop_stream()
@@ -403,21 +408,28 @@ def RecordWav(length, name):
     wf.writeframes(b''.join(frames))
     wf.close()
 
-async def RecordWavAsync(length, name):
+async def RecordWavAsync(name):
     loop = asyncio.get_event_loop()
 
-    recBar.configure(determinate_speed= 1/(length*60))
+    #recBar.configure(determinate_speed= 1/(length*60))
     recBar.start()
 
     with concurrent.futures.ThreadPoolExecutor() as audioPool:
-        await loop.run_in_executor(audioPool, func= lambda: RecordWav(length, name))
+        await loop.run_in_executor(audioPool, func= lambda: RecordWav(name))
+
+    recBar.stop()
 
 async def RecordAudio():
-    length = int(recordLength.get())
-    name = convNameEntry.get()
-    await RecordWavAsync(length, name)
-    recBar.stop()
-    recBar.set(0)
+    global recording
+    if recording == False:
+        recording = True
+        recordButton.configure(text = "Stop")
+        name = convNameEntry.get()
+        await RecordWavAsync(name)
+    else:
+        recording = False
+        recordButton.configure(text = "Record")
+    
 
 ########## Record Audio ##########
     
@@ -489,6 +501,9 @@ def init():
     global dropSpeakersDefault
     global dropModelsDefault
     global previewsGenerated
+    global recording
+
+    recording = False
 
     dropSpeakersDefault = "Select Voice"
     dropLangsDefault = "Select Language"
@@ -525,7 +540,7 @@ def main():
     global convLang
     global previewBar
     global recBar
-    global recordLength
+    global recordButton
     global convNameEntry
     
     init()
@@ -669,30 +684,24 @@ def main():
         convLang.set(GetSetting("lastLang"))
     convLang.grid(row=0, column=1, columnspan=2, sticky=EW, pady=5, padx=5)
 
-    customtkinter.CTkLabel(voiceConvRecord, text="Recording Length:", width=5, pady=5, padx=10).grid(row=1, column=0, columnspan=2, sticky=W)
-    recordLength = customtkinter.CTkOptionMenu(voiceConvRecord, width=50, values=["1","2","3","4","5","6","7","8","9","10"])
-    recordLength.grid(row=1, column=2, sticky=W)
-    customtkinter.CTkLabel(voiceConvRecord, text="mins", width=5, pady=5, padx=10).grid(row=1, column=2)
-
-    customtkinter.CTkLabel(voiceConvRecord, text="Name:", width=5, pady=5, padx=10).grid(row=3, column=0)
+    customtkinter.CTkLabel(voiceConvRecord, text="Name:", width=5, pady=5, padx=10).grid(row=1, column=0)
     convNameEntry = customtkinter.CTkEntry(voiceConvRecord)
-    convNameEntry.grid(row=2, column=1, pady=5, padx=5, columnspan=2)
+    convNameEntry.grid(row=1, column=1, pady=5, padx=5, columnspan=2)
 
     #Save Directory
     convDirectEntry = customtkinter.CTkEntry(voiceConvRecord)
     LoadDirectory(convDirectEntry, "recSaveDirectory")
     convDirectEntry.grid(row=3, column=0, columnspan=3, sticky=EW, pady=5, padx=5)
 
-    customtkinter.CTkLabel(voiceConvRecord, text="Dir:", pady=5, padx=10).grid(row=4, column=0)
+    customtkinter.CTkLabel(voiceConvRecord, text="Dir:", pady=5, padx=10).grid(row=2, column=0)
     convDirectButton = customtkinter.CTkButton(voiceConvRecord, text='Browse...', command = lambda: GetDirectory(convDirectEntry, "recSaveDirectory"))
-    convDirectButton.grid(row=4, column=2)
+    convDirectButton.grid(row=2, column=2)
     
     recordButton= customtkinter.CTkButton(voiceConvRecord, text='Record', command= async_handler(RecordAudio))
-    recordButton.grid(row=5, column=0, columnspan=3, pady=5, padx=10)
+    recordButton.grid(row=4, column=0, columnspan=3, pady=5, padx=10)
 
-    recBar = customtkinter.CTkProgressBar(voiceConvRecord, orientation="horizontal", width=200)
-    recBar.set(0)
-    recBar.grid(row=6, column=0, columnspan=3, pady=5, padx=10)
+    recBar = customtkinter.CTkProgressBar(voiceConvRecord, orientation="horizontal", width=200, mode = "indeterminate")
+    recBar.grid(row=5, column=0, columnspan=3, pady=5, padx=10)
 
     saveSelection = customtkinter.CTkFrame(rightFrame)
     saveSelection.grid(row=2, column=0, padx=10, pady=10, sticky=EW+S)
@@ -732,6 +741,11 @@ def main():
         else:
             finishButton.configure(state="disabled")
             previewButton.configure(state="disabled")
+        
+        if (convNameEntry.get() != ""):
+            recordButton.configure(state="normal")
+        else:
+            recordButton.configure(state="disabled")
     ConstUpdate()
 
     #Define main loop
