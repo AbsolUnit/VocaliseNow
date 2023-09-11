@@ -6,4 +6,6 @@
 6. python.exe -m pip install pip wheel setuptools -U
 7. pip install tts
 8. pip install customtkinter
-9. move contents of CustomPackages into Lib/site-packages and click replace
+9. pip install async-tkinter-loop==0.8.1
+10. pip install pyaudio
+11. move contents of CustomPackages into Lib/site-packages and click replace
