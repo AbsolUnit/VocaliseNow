@@ -11,7 +11,6 @@ import FairseqLangs
 
 import asyncio
 import concurrent.futures
-from async_tkinter_loop import async_handler, async_mainloop
 
 
 ########## Json handling ##########
